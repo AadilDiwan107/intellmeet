@@ -23,6 +23,9 @@ const VideoCall = () => {
 
   const [remoteStreams, setRemoteStreams] = useState({});
   const [users, setUsers] = useState({});
+  const [participants, setParticipants] = useState([]);
+  const [showParticipants, setShowParticipants] = useState(false);
+
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [typingUsers, setTypingUsers] = useState([]);
@@ -59,13 +62,38 @@ const VideoCall = () => {
         roomId: roomId || "room1",
         name: myName,
       });
+
+      // ✅ ADD YOURSELF
+      setParticipants([
+        {
+          id: socket.id,
+          name: myName,
+          mic: true,
+          camera: true,
+          online: true,
+        },
+      ]);
     };
 
     start();
 
-    // USER JOIN
+    // =========================
+    // 👤 USER JOINED
+    // =========================
     socket.on("user-joined", async ({ userId, name }) => {
       setUsers((prev) => ({ ...prev, [userId]: name }));
+
+      // ✅ PARTICIPANTS
+      setParticipants((prev) => [
+        ...prev,
+        {
+          id: userId,
+          name,
+          mic: true,
+          camera: true,
+          online: true,
+        },
+      ]);
 
       const peer = new RTCPeerConnection();
       peersRef.current[userId] = peer;
@@ -96,6 +124,9 @@ const VideoCall = () => {
       socket.emit("offer", { offer, to: userId });
     });
 
+    // =========================
+    // 📞 OFFER
+    // =========================
     socket.on("offer", async ({ offer, from }) => {
       const peer = new RTCPeerConnection();
       peersRef.current[from] = peer;
@@ -128,16 +159,25 @@ const VideoCall = () => {
       socket.emit("answer", { answer, to: from });
     });
 
+    // =========================
+    // ✅ ANSWER
+    // =========================
     socket.on("answer", async ({ answer, from }) => {
       const peer = peersRef.current[from];
       if (peer) await peer.setRemoteDescription(answer);
     });
 
+    // =========================
+    // ❄️ ICE
+    // =========================
     socket.on("ice-candidate", async ({ candidate, from }) => {
       const peer = peersRef.current[from];
       if (peer) await peer.addIceCandidate(candidate);
     });
 
+    // =========================
+    // 💬 CHAT
+    // =========================
     socket.on("receive-message", ({ message, sender }) => {
       setMessages((prev) => [
         ...prev,
@@ -149,6 +189,9 @@ const VideoCall = () => {
       ]);
     });
 
+    // =========================
+    // ✍️ TYPING
+    // =========================
     socket.on("user-typing", ({ userId }) => {
       setTypingUsers((prev) =>
         prev.includes(userId) ? prev : [...prev, userId]
@@ -159,36 +202,67 @@ const VideoCall = () => {
       setTypingUsers((prev) => prev.filter((id) => id !== userId));
     });
 
+    // =========================
+    // ❌ USER LEFT
+    // =========================
+    socket.on("user-left", ({ userId }) => {
+      setParticipants((prev) =>
+        prev.filter((user) => user.id !== userId)
+      );
+
+      setRemoteStreams((prev) => {
+        const updated = { ...prev };
+        delete updated[userId];
+        return updated;
+      });
+    });
+
     return () => socket.disconnect();
   }, []);
 
+  // =========================
+  // 🔽 AUTO SCROLL
+  // =========================
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    chatEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
   }, [messages]);
 
   // =========================
-  // 💬 CHAT
+  // 💬 SEND MESSAGE
   // =========================
   const sendMessage = () => {
     if (!message.trim()) return;
 
-    socket.emit("send-message", { roomId, message });
+    socket.emit("send-message", {
+      roomId,
+      message,
+    });
 
     setMessages((prev) => [
       ...prev,
-      { text: message, self: true, senderName: myName },
+      {
+        text: message,
+        self: true,
+        senderName: myName,
+      },
     ]);
 
     setMessage("");
     socket.emit("stop-typing", { roomId });
   };
 
+  // =========================
+  // ⌨️ TYPING
+  // =========================
   const handleTyping = (value) => {
     setMessage(value);
 
     socket.emit("typing", { roomId });
 
     clearTimeout(typingTimeoutRef.current);
+
     typingTimeoutRef.current = setTimeout(() => {
       socket.emit("stop-typing", { roomId });
     }, 1000);
@@ -206,7 +280,10 @@ const VideoCall = () => {
     screenTrackRef.current = screenTrack;
 
     Object.values(peersRef.current).forEach((peer) => {
-      const sender = peer.getSenders().find((s) => s.track?.kind === "video");
+      const sender = peer
+        .getSenders()
+        .find((s) => s.track?.kind === "video");
+
       if (sender) sender.replaceTrack(screenTrack);
     });
 
@@ -220,7 +297,10 @@ const VideoCall = () => {
     const videoTrack = streamRef.current.getVideoTracks()[0];
 
     Object.values(peersRef.current).forEach((peer) => {
-      const sender = peer.getSenders().find((s) => s.track?.kind === "video");
+      const sender = peer
+        .getSenders()
+        .find((s) => s.track?.kind === "video");
+
       if (sender) sender.replaceTrack(videoTrack);
     });
 
@@ -235,6 +315,7 @@ const VideoCall = () => {
     const stream = streamRef.current;
 
     const recorder = new MediaRecorder(stream);
+
     mediaRecorderRef.current = recorder;
     recordedChunksRef.current = [];
 
@@ -250,6 +331,7 @@ const VideoCall = () => {
       });
 
       const url = URL.createObjectURL(blob);
+
       const a = document.createElement("a");
       a.href = url;
       a.download = "recording.webm";
@@ -269,52 +351,46 @@ const VideoCall = () => {
     <div className="vh-100 d-flex flex-column bg-dark text-white">
 
       {/* HEADER */}
-      <div className="d-flex justify-content-between p-3 border-bottom">
-        <h5>🎥 IntellMeet</h5>
+      <div className="d-flex justify-content-between align-items-center p-3 border-bottom bg-black">
+        <h5 className="m-0">🎥 IntellMeet</h5>
 
-        <div className="d-flex gap-2">
-
-          {/* SCREEN SHARE */}
-          <button
-            onClick={isSharing ? stopScreenShare : startScreenShare}
-            className={`btn ${
-              isSharing ? "btn-warning" : "btn-success"
-            } btn-sm`}
-          >
-            {isSharing ? "Stop Sharing" : "Share Screen"}
-          </button>
-
-          {/* RECORDING */}
-          <button
-            onClick={isRecording ? stopRecording : startRecording}
-            className={`btn ${
-              isRecording ? "btn-danger" : "btn-outline-danger"
-            } btn-sm`}
-          >
-            {isRecording ? "Stop Recording 🔴" : "Start Recording"}
-          </button>
-
-          <button onClick={handleLogout} className="btn btn-danger btn-sm">
-            Leave
-          </button>
-        </div>
+        <button
+          onClick={() => setShowParticipants(!showParticipants)}
+          className="btn btn-outline-light btn-sm"
+        >
+          👥 Participants ({participants.length})
+        </button>
       </div>
 
-      <div className="d-flex flex-grow-1">
+      <div className="d-flex flex-grow-1 position-relative">
 
-        {/* VIDEO */}
+        {/* VIDEO AREA */}
         <div className="flex-grow-1 position-relative p-2">
 
+          {/* REMOTE VIDEOS */}
           <div className="row g-2 h-100">
             {Object.entries(remoteStreams).map(([id, stream]) => (
-              <div key={id} className="col-md-6 h-100 position-relative">
+              <div
+                key={id}
+                className="col-md-6 h-100 position-relative"
+              >
                 <video
                   autoPlay
                   playsInline
                   className="w-100 h-100 rounded"
-                  ref={(video) => video && (video.srcObject = stream)}
+                  style={{
+                    objectFit: "cover",
+                    background: "#000",
+                  }}
+                  ref={(video) => {
+                    if (video) {
+                      video.srcObject = stream;
+                    }
+                  }}
                 />
-                <div className="position-absolute bottom-0 start-0 m-2 px-2 py-1 bg-dark rounded small">
+
+                <div className="position-absolute bottom-0 start-0 m-2 px-3 py-1 bg-dark rounded-pill small d-flex align-items-center gap-2">
+                  <span className="text-success">🟢</span>
                   {users[id] || "User"}
                 </div>
               </div>
@@ -323,43 +399,65 @@ const VideoCall = () => {
 
           {/* SELF VIDEO */}
           <div className="position-absolute bottom-0 end-0 m-3">
-            <video
-              ref={localVideo}
-              autoPlay
-              muted
-              playsInline
-              className="rounded"
-              style={{
-                width: "200px",
-                height: "150px",
-                objectFit: "cover",
-                border: "2px solid white",
-              }}
-            />
-            <div className="position-absolute bottom-0 start-0 m-1 px-2 py-1 bg-dark rounded small">
-              {myName}
+            <div className="position-relative">
+              <video
+                ref={localVideo}
+                autoPlay
+                muted
+                playsInline
+                className="rounded shadow-lg"
+                style={{
+                  width: "220px",
+                  height: "160px",
+                  objectFit: "cover",
+                  border: "2px solid white",
+                  background: "#000",
+                }}
+              />
+
+              <div className="position-absolute bottom-0 start-0 m-1 px-3 py-1 bg-dark rounded-pill small">
+                🟢 {myName}
+              </div>
             </div>
           </div>
 
-          {/* 🔴 RECORD INDICATOR */}
+          {/* RECORDING */}
           {isRecording && (
-            <div className="position-absolute top-0 start-0 m-3 text-danger fw-bold">
+            <div className="position-absolute top-0 start-0 m-3 text-danger fw-bold bg-dark px-3 py-2 rounded-pill">
               🔴 Recording...
             </div>
           )}
         </div>
 
         {/* CHAT */}
-        <div className="bg-secondary p-2" style={{ width: "300px" }}>
-          <h6>💬 Chat</h6>
+        <div
+          className="bg-secondary p-3 d-flex flex-column"
+          style={{
+            width: "320px",
+          }}
+        >
+          <h6 className="mb-3">💬 Chat</h6>
 
-          <div style={{ height: "65vh", overflowY: "auto" }}>
+          <div
+            className="flex-grow-1"
+            style={{
+              overflowY: "auto",
+            }}
+          >
             {messages.map((msg, i) => (
-              <div key={i} className={`mb-2 ${msg.self ? "text-end" : ""}`}>
-                <small className="text-info">{msg.senderName}</small>
+              <div
+                key={i}
+                className={`mb-2 ${msg.self ? "text-end" : ""}`}
+              >
+                <small className="text-info">
+                  {msg.senderName}
+                </small>
+
                 <div
                   className={`p-2 rounded ${
-                    msg.self ? "bg-primary" : "bg-dark"
+                    msg.self
+                      ? "bg-primary"
+                      : "bg-dark"
                   }`}
                 >
                   {msg.text}
@@ -368,29 +466,204 @@ const VideoCall = () => {
             ))}
 
             {typingUsers.length > 0 && (
-              <div className="text-muted small">
-                {typingUsers.map((id) => users[id] || "Someone").join(", ")} is typing...
+              <div className="small text-light">
+                {typingUsers
+                  .map((id) => users[id] || "Someone")
+                  .join(", ")}{" "}
+                is typing...
               </div>
             )}
 
             <div ref={chatEndRef}></div>
           </div>
 
-          <div className="d-flex mt-2">
+          <div className="d-flex mt-3">
             <input
               className="form-control me-2"
               value={message}
-              onChange={(e) => handleTyping(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              onChange={(e) =>
+                handleTyping(e.target.value)
+              }
+              onKeyDown={(e) =>
+                e.key === "Enter" && sendMessage()
+              }
+              placeholder="Type message..."
             />
-            <button onClick={sendMessage} className="btn btn-primary">
+
+            <button
+              onClick={sendMessage}
+              className="btn btn-primary"
+            >
               Send
             </button>
           </div>
-
-          
         </div>
 
+        {/* 👥 PARTICIPANTS PANEL */}
+        {showParticipants && (
+          <div
+            className="position-absolute top-0 end-0 bg-dark text-white shadow-lg border-start border-secondary"
+            style={{
+              width: "320px",
+              height: "100%",
+              zIndex: 999,
+              overflowY: "auto",
+            }}
+          >
+            {/* HEADER */}
+            <div className="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary">
+              <div>
+                <h5 className="m-0">
+                  👥 Participants
+                </h5>
+
+                <small className="text-light">
+                  {participants.length} in meeting
+                </small>
+              </div>
+
+              <button
+                className="btn btn-sm btn-outline-light rounded-circle"
+                onClick={() =>
+                  setShowParticipants(false)
+                }
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* PARTICIPANTS LIST */}
+            <div className="p-2">
+              {participants.map((user) => (
+                <div
+                  key={user.id}
+                  className="d-flex justify-content-between align-items-center rounded p-3 mb-2"
+                  style={{
+                    background:
+                      user.name === myName
+                        ? "rgba(13,110,253,0.25)"
+                        : "rgba(255,255,255,0.05)",
+                    border:
+                      user.name === myName
+                        ? "1px solid rgba(13,110,253,0.5)"
+                        : "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div className="d-flex align-items-center gap-3">
+
+                    {/* AVATAR */}
+                    <div
+                      className="rounded-circle d-flex align-items-center justify-content-center fw-bold"
+                      style={{
+                        width: "45px",
+                        height: "45px",
+                        background:
+                          "linear-gradient(135deg,#0d6efd,#3b82f6)",
+                      }}
+                    >
+                      {user.name.charAt(0).toUpperCase()}
+                    </div>
+
+                    {/* INFO */}
+                    <div>
+                      <div className="fw-semibold d-flex align-items-center gap-2">
+                        {user.name}
+
+                        {user.name === myName && (
+                          <span className="badge bg-primary">
+                            You
+                          </span>
+                        )}
+                      </div>
+
+                      <small className="text-success">
+                        🟢 Online
+                      </small>
+                    </div>
+                  </div>
+
+                  {/* STATUS ICONS */}
+                  <div className="d-flex gap-2 fs-5">
+                    <span title="Microphone">
+                      🎤
+                    </span>
+
+                    <span title="Camera">
+                      📷
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* CONTROL BAR */}
+      <div className="bg-black border-top p-3 d-flex justify-content-center align-items-center gap-3">
+
+        {/* SCREEN SHARE */}
+        <button
+          onClick={
+            isSharing
+              ? stopScreenShare
+              : startScreenShare
+          }
+          className={`btn rounded-circle ${
+            isSharing
+              ? "btn-warning"
+              : "btn-dark"
+          }`}
+          style={{
+            width: "55px",
+            height: "55px",
+          }}
+        >
+          🖥️
+        </button>
+
+        {/* RECORD */}
+        <button
+          onClick={
+            isRecording
+              ? stopRecording
+              : startRecording
+          }
+          className={`btn rounded-circle ${
+            isRecording
+              ? "btn-danger"
+              : "btn-dark"
+          }`}
+          style={{
+            width: "55px",
+            height: "55px",
+          }}
+        >
+          🔴
+        </button>
+
+        {/* PARTICIPANTS */}
+        <button
+          onClick={() =>
+            setShowParticipants(!showParticipants)
+          }
+          className="btn btn-dark rounded-circle"
+          style={{
+            width: "55px",
+            height: "55px",
+          }}
+        >
+          👥
+        </button>
+
+        {/* LEAVE */}
+        <button
+          onClick={handleLogout}
+          className="btn btn-danger rounded-pill px-4"
+        >
+          Leave
+        </button>
       </div>
     </div>
   );
