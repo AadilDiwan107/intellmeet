@@ -1,0 +1,24 @@
+import { createRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import "./index.css";
+import App from "./App.jsx";
+import "bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap/dist/js/bootstrap.bundle.min.js"; // 🔥 Added to make Offcanvas & Modals work!
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+// (optional devtools)
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+
+// 🔥 create query client
+const queryClient = new QueryClient();
+
+createRoot(document.getElementById("root")).render(
+  <QueryClientProvider client={queryClient}>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+
+    {/* 🔥 Devtools (optional but recommended) */}
+    <ReactQueryDevtools initialIsOpen={false} />
+  </QueryClientProvider>
+);
