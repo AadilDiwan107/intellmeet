@@ -1,11 +1,7 @@
-let socket;
-
 import { io } from "socket.io-client";
 
-if (!socket) {
-  socket = io("http://localhost:5000", {
-    transports: ["websocket"],
-  });
-}
+const socket = io("https://intellmeet-1-79gh.onrender.com", {
+  transports: ["websocket"],
+});
 
 export default socket;
