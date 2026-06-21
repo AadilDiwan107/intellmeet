@@ -13,7 +13,15 @@ connectDB();
 
 const app = express();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "https://intellmeet-b5h9j45d-aadildiwan107s-projects.vercel.app"
+    ],
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
 app.use("/api/auth", authRoutes);
@@ -26,7 +34,12 @@ app.get("/", (req, res) => {
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: { origin: "*" },
+  cors: {
+    origin: [
+      "https://intellmeet-b5h9j45d-aadildiwan107s-projects.vercel.app"
+    ],
+    methods: ["GET", "POST"],
+  },
 });
 
 io.on("connection", (socket) => {
